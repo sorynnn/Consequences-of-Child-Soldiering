@@ -1,0 +1,94 @@
+---
+title: "Consequences of Child Soldiering"
+author: "Soryn Lurding"
+date: "October 13, 2024"
+output: pdf_document
+---
+Propensity Score Matching
+
+For this problem, you will analyze the data from:
+
+  Chirstopher Blattman and J Annan. 2010. "The consequences of child soldiering" _Review of Economics and Statistics_ 92 (4):882-898
+
+The data are from a panel survey of male youth in war-afflicted regions of Uganda. The authors want to estimate the impact of forced military service on various outcomes. They focus on Uganda because there were a significant number of abductions of young men into Lord's Resistance Army.
+
+Blattman and Annan describe the abductions as follows:
+
+Abduction was large-scale and seemingly indiscriminate; 60,000 to 80,000 youth are estimated to have been abducted and more than a quarter of males currently aged 14 to 30 in our study region were abducted for at least two weeks. Most were abducted after 1996 and from one of the Acholi districts of Gulu, Kitgum, and Pader. 
+
+Youth were typically taken by roving groups of 10 to 20 rebels during night raids on rural homes. Adolescent males appear to have been the most pliable, reliable and effective forced recruits, and so were disproportionately targeted by the LRA. Youth under age 11 and over 24 tended to be avoided and had a high probability of immediate release. Lengths of abduction ranged from a day to ten years, averaging 8.9 months in our sample. Youth who failed toe escape were trained as fighters and, after a few months, received a gun. Two thirds of abductees were forced to perpetrate a crime or violence. A third eventually became fighters and a fifth were forced to murder soldiers, civilians, or even family members in order to bind them to the group, to reduce their fear of killing, and to discourage disobedience.
+
+In this problem we will look at the effect of abduction on _educ_ (years of education). The _abd_ variable is the treatment in this case. Note that _educ, distress, and logwage_ are all outcomes/post-treatment variables.
+
+Variables | Description
+----------|----------------------------------------
+ abd | abducted by the LRA (the treatment)
+ c_ach - c_pal | Location indicators (each abbreviation corresponds to a subdistrict; i.e. ach = Acholibur, etc.)
+ age | age in years
+ fthr_ed | father's education (years)
+ mthr_ed | mother's education (years)
+ orphan96 | indicator if parent's died before 1996
+ hh_fthr_frm | indicator if father is a farmer
+ hh_size96 | household size in 1996
+ educ | years of education
+ distress | index of emotional distress (0-15)
+ logwage | log of average daily wage earned in last 4 weeks
+ 
+ 1. Calculate the naive Average Treatment Effect (ATE) of abduction on education (educ), distress (distress), and wages (logwage). Do this by running three separate regressions. 
+ 
+```{r eval=TRUE}
+library(readr)
+library(modelsummary)
+blattman <- read_csv("~/Downloads/blattman.csv")
+reg1 <- lm(educ ~ abd, data = blattman)
+reg2 <- lm(distress ~ abd, data = blattman)
+reg3 <- lm(log.wage ~ abd, data = blattman)
+modelsummary(list("Education"=reg1, "Distress"=reg2, "Log Wage"=reg3), stars = TRUE, coef_rename = c(abd="Abduction"), title = "ATE of Abduction")
+
+```
+ 
+ 
+ 2. Use a parametric model (Probit/Logit) to calculate the propensity scores for each person in the data to be abducted. Include whatever covariates or functions of covariates you think may be important.
+ 
+```{r eval=TRUE}
+logit1 <- glm(abd ~ hh_size96 + hh_fthr_frm + orphan96 + mthr_ed + fthr_ed + age, data = blattman)
+blattman$pscore <- predict(logit1, type="response")
+```
+ 
+ 
+ 3. Use optimal match over the whole data set to estimate the ATE using propensity score matching. Do this for all three dependent variables. 
+ 
+```{r eval=TRUE}
+library(MatchIt)
+library(optmatch)
+m.nn<-matchit(abd ~ hh_size96 + hh_fthr_frm + orphan96 + mthr_ed + fthr_ed + age + C_ach + C_akw + C_ata + C_kma + C_oro + C_pad + C_paj + C_pal, data = blattman, ratio=1, method ="optimal")
+#USE logit equation and put it in match it above
+#The new match dataset:
+nn.match<-match.data(m.nn)
+
+reg4 <- lm(educ ~ abd, data = nn.match)
+reg5 <- lm(distress ~ abd, data = nn.match)
+reg6 <- lm(log.wage ~ abd, data = nn.match)
+
+modelsummary(list("Education"=reg4,"Distress"=reg5,"Log Wages"=reg6),stars = TRUE, coef_rename = c(abd="Abduction"), title = "Propensity Score Matching: Estimating ATE")
+#sample size gets smaller
+```
+ 
+ 
+ 4. Use the cobalt package to make a "Love plot". You can find information of the cobalt package [here](https://cran.r-project.org/web/packages/cobalt/vignettes/cobalt_A0_basic_use.html)
+ 
+```{r eval=TRUE}
+library(cobalt)
+library(RItools)
+b1<-bal.tab(abd ~ hh_size96 + hh_fthr_frm+orphan96+mthr_ed+fthr_ed+age,data=blattman,int = TRUE)
+v1<-var.names(b1, type = "vec", minimal = TRUE)
+v1["hh_size96"]<-"Household Size in 1996"
+v1["hh_fthr_frm"]<-"Father was Farmer"
+v1["orphan96"]<-"Orphaned in 1996"
+v1["mthr_ed"]<-"Mother's Education"
+v1["fthr_ed"]<-"Father's Education"
+v1["age"]<-"Age"
+
+love.plot(m.nn, binary ="std", var.names = v1, colors = c("blue", "green"), title = "Propensity Score Matching: Covariate Balance Check") #use v1 for your variable names
+```
+ 
