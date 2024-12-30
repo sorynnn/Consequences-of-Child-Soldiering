@@ -41,7 +41,7 @@ In this project, we use **Propensity Score Matching (PSM)** to estimate the **Av
 
 ## How to Run
 
-1. Download the data (blattman.csv)
+1. Download the data (blattman.csv).
 2. Clone the repository to your local machine.
 3. Open the R Markdown file in RStudio.
 4. Run the analysis by knitting the file.
